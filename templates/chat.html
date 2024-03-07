@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div>
+    <h2>Hello {{ username }}</h2>
+    <div id="messages"></div>
+    <form>
+        <input type="text" name="message" id="message" placeholder="Message" />
+        <input type="submit" value="Send" />
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<template id="message-template">
+    <article>
+        <em data-role="time"></em>
+        <div data-role="message"></div>
+    </article>
+</template>
+<script type="module">
+const messagesContainer = document.getElementById('messages');
+
+const displayOwnMessage = (message) => {
+    const template = document.getElementById('message-template');
+    const clone = template.content.cloneNode(true);
+    const article = clone.querySelector('article');
+    article.style.backgroundColor = '#bfdbfe';
+    const timeContainer = clone.querySelector('[data-role="time"]');
+    timeContainer.textContent = new Date().toLocaleTimeString();
+    const messageContainer = clone.querySelector('[data-role="message"]');
+    messageContainer.textContent = message;
+
+    messagesContainer.appendChild(clone);
+}
+
+const displayOtherMessage = (message) => {
+    const template = document.getElementById('message-template');
+    const clone = template.content.cloneNode(true);
+    const article = clone.querySelector('article');
+    const timeContainer = clone.querySelector('[data-role="time"]');
+    timeContainer.textContent = new Date().toLocaleTimeString();
+    const messageContainer = clone.querySelector('[data-role="message"]');
+    messageContainer.textContent = message;
+
+    messagesContainer.appendChild(clone);
+}
+
+const websocket = new WebSocket('ws://localhost:8000/ws/{{username}}');
+
+const form = document.querySelector('form');
+form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const message = event.target.message.value;
+
+    websocket.send(message);
+
+    displayOwnMessage(message);
+
+    event.target.reset();
+})
+
+websocket.onmessage = (event) => {
+    displayOtherMessage(event.data);
+}
+</script>
+{% endblock %}

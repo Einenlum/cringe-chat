@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div>
+    <h2>Welcome</h2>
+    <form action="/enter-chat" method="POST">
+        {% if error %}
+            <p>{{ error }}</p>
+        {% endif %}
+
+        <input type="text" name="username" id="username" placeholder="Choose a username" />
+        <input type="submit" value="Send" />
+    </form>
+</div>
+{% endblock %}
