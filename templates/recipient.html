@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div>
+    <h2>Welcome</h2>
+    <form action="/chat?{{username_query_string}}" method="POST">
+        {% if error %}
+            <p>{{ error }}</p>
+        {% endif %}
+
+        <input type="text" name="recipient" id="recipient" placeholder="Choose a connected recipient" />
+        <input type="hidden" name="username" value="{{encoded_username}}"/>
+        <input type="submit" value="Send" />
+    </form>
+</div>
+{% endblock %}

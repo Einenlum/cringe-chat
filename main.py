@@ -1,27 +1,30 @@
-from utils import encode_query_params, redirect_with_error, redirect_with_query_params
+from pprint import pprint
+import json
+from utils import (
+    redirect_with_error,
+    redirect_with_query_params,
+    encode_query_params,
+    generate_uuid,
+)
 from security import encrypt_message, decrypt_message
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
-from datetime import datetime
-from uuid import uuid4
-from faker import Faker
-import json
+import server_message_types as server_types
+import client_message_types as client_types
 
 app = FastAPI()
 
 templates = Jinja2Templates(directory="templates")
 
 connected_users: dict[str, WebSocket] = {}
-rooms: list[tuple[str, str]] = []
 
 
 async def _send_connected_users_message():
-    msg = f"Users connected: {len(connected_users)}"
+    msg = {"type": "connected_users", "value": len(connected_users.keys())}
 
     for _, ws in connected_users.items():
-        await ws.send_text(msg)
+        await ws.send_json(msg)
 
 
 app.add_middleware(
@@ -54,18 +57,18 @@ async def chat(request: Request):
 
     username = decrypt_message(encoded_username)
 
-    if username in connected_users.keys():
-        error = f'Username "{username}" is already taken'
-
-        return redirect_with_error("/", error)
-
     return templates.TemplateResponse(
-        request=request, name="chat.html", context={"username": username}
+        request=request,
+        name="chat.html",
+        context={
+            "username": username,
+            "encoded_username": encoded_username,
+        },
     )
 
 
-@app.post("/enter-chat")
-async def enter_chat(request: Request):
+@app.post("/choose-username")
+async def choose_username(request: Request):
     data = await request.form()
     username = str(data["username"])
 
@@ -79,14 +82,74 @@ async def enter_chat(request: Request):
     return redirect_with_query_params("/chat", {"encoded_username": encoded_username})
 
 
-@app.websocket("/ws/{username}")
-async def ws_endpoint(username: str, websocket: WebSocket):
+@app.websocket("/ws/{encoded_username}")
+async def ws_endpoint(encoded_username: str, websocket: WebSocket):
     global connected_users
 
-    await websocket.accept()
+    username = decrypt_message(encoded_username)
 
     if username in connected_users.keys():
+        print("close socket because username taken")
         await websocket.close(reason="Username taken")
+
+    chosen_recipient_username = None
+    chosen_recipient = None
+
+    async def new_recipient(recipient):
+        nonlocal chosen_recipient_username, chosen_recipient
+
+        chosen_recipient_username = recipient
+        chosen_recipient = connected_users[recipient]
+
+        msg = {
+            "type": server_types.RECIPIENT_CHOSEN,
+            "value": chosen_recipient_username,
+        }
+        await websocket.send_json(msg)
+
+        msg = {"type": server_types.RECIPIENT_CHOSEN, "value": username}
+        await chosen_recipient.send_json(msg)
+
+    async def handle_received_message(data: dict[str, str]):
+        nonlocal chosen_recipient
+
+        if data["type"] == client_types.CHOOSE_RECIPIENT:
+            recipient = data["value"]
+
+            if recipient not in connected_users.keys():
+                msg = {
+                    "type": server_types.RECIPIENT_NOT_CONNECTED,
+                    "value": "Recipient not found",
+                }
+                await websocket.send_json(msg)
+
+                return
+
+            await new_recipient(recipient)
+
+            return
+
+        if data["type"] == client_types.SEND_CHAT_MESSAGE:
+            if not chosen_recipient:
+                msg = {
+                    "type": server_types.ERROR,
+                    "value": "No recipient",
+                }
+                await websocket.send_json(msg)
+
+                return
+
+            text = data["value"]
+            msg = {
+                "type": server_types.CHAT_MESSAGE,
+                "value": text,
+            }
+
+            await chosen_recipient.send_json(msg)
+
+            return
+
+    await websocket.accept()
 
     connected_users[username] = websocket
 
@@ -94,11 +157,13 @@ async def ws_endpoint(username: str, websocket: WebSocket):
 
     try:
         while True:
-            data = await websocket.receive_text()
-            await websocket.send_text(f"Message text was: {data}")
-    except:
+            data = await websocket.receive_json()
+
+            await handle_received_message(data)
+    except Exception as e:
         del connected_users[username]
         await _send_connected_users_message()
+        pprint("close socket because exception")
         await websocket.close()
 
 
