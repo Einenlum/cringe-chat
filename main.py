@@ -1,30 +1,33 @@
-from pprint import pprint
-import json
-from utils import (
-    redirect_with_error,
-    redirect_with_query_params,
-    encode_query_params,
-    generate_uuid,
-)
-from security import encrypt_message, decrypt_message
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+import asyncio
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
-import server_message_types as server_types
-import client_message_types as client_types
 
-app = FastAPI()
+from security import decrypt_message, encrypt_message
+from unpile_messages import Broker
+from utils import (
+    redirect_with_error,
+)
+
+broker = Broker()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load the ML model
+    unpile_messages_task = asyncio.create_task(broker.unpile_messages())
+
+    yield
+
+    unpile_messages_task.cancel()
+    # Clean up the ML models and release the resources
+
+
+app = FastAPI(lifespan=lifespan)
 
 templates = Jinja2Templates(directory="templates")
-
-connected_users: dict[str, WebSocket] = {}
-
-
-async def _send_connected_users_message():
-    msg = {"type": "connected_users", "value": len(connected_users.keys())}
-
-    for _, ws in connected_users.items():
-        await ws.send_json(msg)
 
 
 app.add_middleware(
@@ -49,11 +52,33 @@ async def home(request: Request):
     )
 
 
+@app.post("/choose-username")
+async def choose_username(request: Request):
+    data = await request.form()
+    username = str(data["username"])
+
+    if username in broker.connected_users.keys():
+        error = f'Username "{username}" is already taken'
+
+        return redirect_with_error(request, "/", error)
+
+    encoded_username = encrypt_message(username)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="htmx/choose-recipient.html",
+        context={
+            "username": username,
+            "encoded_username": encoded_username,
+        },
+    )
+
+
 @app.get("/chat")
 async def chat(request: Request):
     encoded_username = request.query_params.get("encoded_username")
     if not encoded_username:
-        return redirect_with_error("/", "Username not provided")
+        return redirect_with_error(request, "/", "Username not provided")
 
     username = decrypt_message(encoded_username)
 
@@ -67,104 +92,98 @@ async def chat(request: Request):
     )
 
 
-@app.post("/choose-username")
-async def choose_username(request: Request):
+@app.post("/choose-recipient")
+async def choose_recipient(request: Request):
     data = await request.form()
-    username = str(data["username"])
+    recipient = str(data["recipient"])
+    encoded_username = str(data["encoded_username"])
+    username = decrypt_message(encoded_username)
 
-    if username in connected_users.keys():
-        error = f'Username "{username}" is already taken'
+    error = None
+    if username not in broker.connected_users.keys():
+        error = f'Username "{username}" is not connected'
 
-        return redirect_with_error("/", error)
+    if recipient not in broker.connected_users.keys():
+        error = f'Recipient "{recipient}" is not connected'
 
-    encoded_username = encrypt_message(username)
+    if error:
+        return templates.TemplateResponse(
+            request=request,
+            name="htmx/choose-recipient.html",
+            context={
+                "username": username,
+                "encoded_username": encoded_username,
+                "error": error,
+            },
+        )
 
-    return redirect_with_query_params("/chat", {"encoded_username": encoded_username})
+    await broker.new_room_for_users(username, recipient)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="htmx/chat.html",
+        context={
+            "username": username,
+            "encoded_username": encoded_username,
+            "recipient": recipient,
+            "error": error,
+        },
+    )
+
+
+# @app.post("/send-message")
+# async def send_message(request: Request):
+#     data = await request.form()
+#     encoded_username = str(data["encoded_username"])
+#     username = decrypt_message(encoded_username)
+#     message = str(data["message"])
+
+#     if username not in connected_users.keys():
+#         error = f'Username "{username}" is not connected'
+
+#         return redirect_with_error("/", error)
+
+#     if not message:
+#         error = "Message cannot be empty"
+
+#         return redirect_with_error("/chat", error)
+
+#     if (room := _get_room_for_user(username)) is None:
+#         error = "No recipient"
+
+#         return redirect_with_error("/chat", error)
+
+#     recipient = _get_recipient_for_user(room, username)
+#     if recipient is None:
+#         error = "No recipient"
+
+#         return redirect_with_error("/chat", error)
+#     recipient_user = connected_users[recipient]
+
+#     return templates.TemplateResponse(
+#         request=request,
+#         name="htmx/own-message.html",
+#         context={
+#             "time": datetime.now().strftime("%H:%M:%S"),
+#             "message": message,
+#         },
+#         status_code=201,
+#     )
 
 
 @app.websocket("/ws/{encoded_username}")
 async def ws_endpoint(encoded_username: str, websocket: WebSocket):
-    global connected_users
-
     username = decrypt_message(encoded_username)
-
-    if username in connected_users.keys():
-        print("close socket because username taken")
-        await websocket.close(reason="Username taken")
-
-    chosen_recipient_username = None
-    chosen_recipient = None
-
-    async def new_recipient(recipient):
-        nonlocal chosen_recipient_username, chosen_recipient
-
-        chosen_recipient_username = recipient
-        chosen_recipient = connected_users[recipient]
-
-        msg = {
-            "type": server_types.RECIPIENT_CHOSEN,
-            "value": chosen_recipient_username,
-        }
-        await websocket.send_json(msg)
-
-        msg = {"type": server_types.RECIPIENT_CHOSEN, "value": username}
-        await chosen_recipient.send_json(msg)
-
-    async def handle_received_message(data: dict[str, str]):
-        nonlocal chosen_recipient
-
-        if data["type"] == client_types.CHOOSE_RECIPIENT:
-            recipient = data["value"]
-
-            if recipient not in connected_users.keys():
-                msg = {
-                    "type": server_types.RECIPIENT_NOT_CONNECTED,
-                    "value": "Recipient not found",
-                }
-                await websocket.send_json(msg)
-
-                return
-
-            await new_recipient(recipient)
-
-            return
-
-        if data["type"] == client_types.SEND_CHAT_MESSAGE:
-            if not chosen_recipient:
-                msg = {
-                    "type": server_types.ERROR,
-                    "value": "No recipient",
-                }
-                await websocket.send_json(msg)
-
-                return
-
-            text = data["value"]
-            msg = {
-                "type": server_types.CHAT_MESSAGE,
-                "value": text,
-            }
-
-            await chosen_recipient.send_json(msg)
-
-            return
 
     await websocket.accept()
 
-    connected_users[username] = websocket
-
-    await _send_connected_users_message()
-
     try:
-        while True:
-            data = await websocket.receive_json()
+        await broker.new_user(username, websocket)
 
-            await handle_received_message(data)
-    except Exception as e:
-        del connected_users[username]
-        await _send_connected_users_message()
-        pprint("close socket because exception")
-        await websocket.close()
+        while True:
+            await websocket.receive_text()
+    except Exception:
+        await broker.user_leaves(username)
 
 
 if __name__ == "__main__":

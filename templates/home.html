@@ -3,13 +3,7 @@
 {% block content %}
 <div>
     <h2>Welcome</h2>
-    <form action="/choose-username" method="POST">
-        {% if error %}
-            <p>{{ error }}</p>
-        {% endif %}
 
-        <input type="text" name="username" id="username" placeholder="Choose a username" />
-        <input type="submit" value="Send" />
-    </form>
+    {% include 'htmx/home.html' %}
 </div>
 {% endblock %}

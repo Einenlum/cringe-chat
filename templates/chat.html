@@ -108,6 +108,7 @@ const displayChatForm = (recipient) => {
 
 
     websocket.onmessage = (event) => {
+        console.log('chat onmessage', event);
         const data = JSON.parse(event.data);
 
         if (data['type'] === 'error') {
@@ -145,6 +146,7 @@ const displayChatForm = (recipient) => {
 }
 
 websocket.onmessage = (event) => {
+    console.log('global onmessage', event);
     const data = JSON.parse(event.data);
 
     if (data['type'] === 'error') {
