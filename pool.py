@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import json
 from dataclasses import dataclass
 from pprint import pprint
@@ -7,6 +8,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.templating import Jinja2Templates
 from fastapi.websockets import WebSocketState
 
+from security import decrypt_message, encrypt_message
 from server_message_types import (
     CHAT_MESSAGE,
     CONNECTED_USERS,
@@ -30,6 +32,7 @@ class ConnectedUser:
 class ChatMessage:
     sender: str
     text: str
+    datetime: datetime.datetime
 
 
 class Broker:
@@ -120,7 +123,7 @@ class Broker:
         self.add_html_message(
             username_2,
             "htmx/chat.html",
-            {"encoded_username": encoded_username, "recipient": username_1},
+            {"encoded_username": encrypt_message(username_2), "recipient": username_1},
         )
 
     def new_user(self, username: str, ws: WebSocket):
@@ -160,16 +163,16 @@ class Broker:
             chat_message.sender,
             "htmx/own-message.html",
             {
-                "time": "now",
+                "time": chat_message.datetime,
                 "message": chat_message.text,
             },
         )
 
         self.add_html_message(
             recipient,
-            "htmx/own-message.html",
+            "htmx/recipient-message.html",
             {
-                "time": "now",
+                "time": chat_message.datetime,
                 "message": chat_message.text,
             },
         )
@@ -177,30 +180,20 @@ class Broker:
     def add_websocket_message(self, recipient: str, type: str, msg: dict):
         msg["type"] = type
 
-        pprint("created task to add websocket message: " + json.dumps(msg))
         self.queue.put_nowait({"recipient": recipient, "msg": msg})
-        pprint("websocket message in the queue: " + json.dumps(msg))
 
     def add_html_message(self, recipient: str, template_name: str, params: dict):
-        self.queue.put_nowait(
-            {"recipient": recipient, "template_name": template_name, "params": params}
-        )
+        html = self.templating.get_template(template_name).render(params)
+
+        self.queue.put_nowait({"recipient": recipient, "html": html})
 
     async def unpile_messages(self):
         while True:
-            print("on attend dans send messages")
             to_send = await self.queue.get()
-            print("chopé une task")
             connected_user = self.connected_users[to_send["recipient"]]
-            print("connected user: " + connected_user.username)
-            pprint(to_send)
+
             if connected_user.ws.state != WebSocketState.DISCONNECTED:
-                if "template_name" in to_send:
-                    await connected_user.ws.send_text(
-                        self.templating.get_template(to_send["template_name"]).render(
-                            **to_send["params"]
-                        )
-                    )
+                if "html" in to_send:
+                    await connected_user.ws.send_text(to_send["html"])
                 else:
                     await connected_user.ws.send_json(to_send["msg"])
-            print("fini la task")

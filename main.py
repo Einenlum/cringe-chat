@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from fastapi import FastAPI, Request, Response, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
@@ -112,8 +113,9 @@ async def send_message(request: Request):
     encoded_username = str(data["encoded_username"])
     username = decrypt_message(encoded_username)
     message = str(data["message"])
+    now = datetime.now()
 
-    chat_message = ChatMessage(username, message)
+    chat_message = ChatMessage(username, message, now)
 
     broker.send_chat_message(chat_message)
 
