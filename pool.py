@@ -1,18 +1,13 @@
 import asyncio
 import datetime
-import json
 from dataclasses import dataclass
-from pprint import pprint
 
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
 from fastapi.templating import Jinja2Templates
 from fastapi.websockets import WebSocketState
 
-from security import decrypt_message, encrypt_message
+from security import encrypt_message
 from server_message_types import (
-    CHAT_MESSAGE,
-    CONNECTED_USERS,
-    RECIPIENT_CHOSEN,
     ROOM_KILLED,
 )
 
