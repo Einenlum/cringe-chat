@@ -10,6 +10,7 @@ from security import encrypt_message
 from server_message_types import (
     ROOM_KILLED,
 )
+from utils import encode_query_params
 
 
 @dataclass
@@ -56,10 +57,14 @@ class Broker:
     def _delete_room(self, room: Room):
         for username in room.users:
             try:
-                self.add_websocket_message(
+                self.add_html_message(
                     username,
-                    ROOM_KILLED,
-                    {"value": list(self.connected_users.keys())},
+                    "htmx/redirect-response.html",
+                    {
+                        "queryParams": encode_query_params(
+                            {"error": "The other user left"}
+                        )
+                    },
                 )
             except Exception:
                 pass
@@ -172,11 +177,6 @@ class Broker:
             },
         )
 
-    def add_websocket_message(self, recipient: str, type: str, msg: dict):
-        msg["type"] = type
-
-        self.queue.put_nowait({"recipient": recipient, "msg": msg})
-
     def add_html_message(self, recipient: str, template_name: str, params: dict):
         html = self.templating.get_template(template_name).render(params)
 
@@ -188,7 +188,4 @@ class Broker:
             connected_user = self.connected_users[to_send["recipient"]]
 
             if connected_user.ws.state != WebSocketState.DISCONNECTED:
-                if "html" in to_send:
-                    await connected_user.ws.send_text(to_send["html"])
-                else:
-                    await connected_user.ws.send_json(to_send["msg"])
+                await connected_user.ws.send_text(to_send["html"])
