@@ -1,17 +1,20 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, WebSocket
+from fastapi import FastAPI, Request, Response, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 
+from pool import Broker, ChatMessage
 from security import decrypt_message, encrypt_message
-from unpile_messages import Broker
 from utils import (
+    encode_query_params,
     redirect_with_error,
 )
 
-broker = Broker()
+templates = Jinja2Templates(directory="templates")
+
+broker = Broker(templates)
 
 
 @asynccontextmanager
@@ -26,8 +29,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-
-templates = Jinja2Templates(directory="templates")
 
 
 app.add_middleware(
@@ -70,6 +71,7 @@ async def choose_username(request: Request):
         context={
             "username": username,
             "encoded_username": encoded_username,
+            "safe_encoded_username": encode_query_params(encoded_username),
         },
     )
 
@@ -99,76 +101,23 @@ async def choose_recipient(request: Request):
     encoded_username = str(data["encoded_username"])
     username = decrypt_message(encoded_username)
 
-    error = None
-    if username not in broker.connected_users.keys():
-        error = f'Username "{username}" is not connected'
+    broker.choose_recipient(encoded_username, username, recipient)
 
-    if recipient not in broker.connected_users.keys():
-        error = f'Recipient "{recipient}" is not connected'
-
-    if error:
-        return templates.TemplateResponse(
-            request=request,
-            name="htmx/choose-recipient.html",
-            context={
-                "username": username,
-                "encoded_username": encoded_username,
-                "error": error,
-            },
-        )
-
-    await broker.new_room_for_users(username, recipient)
-
-    return templates.TemplateResponse(
-        request=request,
-        name="htmx/chat.html",
-        context={
-            "username": username,
-            "encoded_username": encoded_username,
-            "recipient": recipient,
-            "error": error,
-        },
-    )
+    return Response(status_code=200)
 
 
-# @app.post("/send-message")
-# async def send_message(request: Request):
-#     data = await request.form()
-#     encoded_username = str(data["encoded_username"])
-#     username = decrypt_message(encoded_username)
-#     message = str(data["message"])
+@app.post("/send-message")
+async def send_message(request: Request):
+    data = await request.form()
+    encoded_username = str(data["encoded_username"])
+    username = decrypt_message(encoded_username)
+    message = str(data["message"])
 
-#     if username not in connected_users.keys():
-#         error = f'Username "{username}" is not connected'
+    chat_message = ChatMessage(username, message)
 
-#         return redirect_with_error("/", error)
+    broker.send_chat_message(chat_message)
 
-#     if not message:
-#         error = "Message cannot be empty"
-
-#         return redirect_with_error("/chat", error)
-
-#     if (room := _get_room_for_user(username)) is None:
-#         error = "No recipient"
-
-#         return redirect_with_error("/chat", error)
-
-#     recipient = _get_recipient_for_user(room, username)
-#     if recipient is None:
-#         error = "No recipient"
-
-#         return redirect_with_error("/chat", error)
-#     recipient_user = connected_users[recipient]
-
-#     return templates.TemplateResponse(
-#         request=request,
-#         name="htmx/own-message.html",
-#         context={
-#             "time": datetime.now().strftime("%H:%M:%S"),
-#             "message": message,
-#         },
-#         status_code=201,
-#     )
+    return Response(status_code=201)
 
 
 @app.websocket("/ws/{encoded_username}")
@@ -178,7 +127,7 @@ async def ws_endpoint(encoded_username: str, websocket: WebSocket):
     await websocket.accept()
 
     try:
-        await broker.new_user(username, websocket)
+        broker.new_user(username, websocket)
 
         while True:
             await websocket.receive_text()

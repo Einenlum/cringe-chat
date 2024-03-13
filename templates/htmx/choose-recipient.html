@@ -1,27 +1,3 @@
-<div id="page-content">
-    <div>Hello {{ username }}</div>
-    <h3>Connected users: <span data-role="connected-users"></span></h3>
-
-    <div>
-        <h2>Choose a recipient</h2>
-        <form hx-post="/choose-recipient" hx-target="#page-content" hx-swap="outerHTML">
-            {% if error %}
-                <div>
-                    {{ error }}
-                </div>
-            {% endif %}
-
-            <input type="text" name="recipient" id="recipient" placeholder="Choose a connected recipient" />
-            <input type="hidden" name="encoded_username" value="{{encoded_username}}" />
-            <input type="submit" value="Send" />
-        </form>
-    </div>
+<div ws-connect="/ws/{{ safe_encoded_username }}">
+  {% include 'htmx/choose-recipient-fragment.html' %}
 </div>
-
-<script type="module">
-console.log('choose-recipient')
-if (!window.ws) {
-    console.log('no window ws choose-recipient')
-    window.ws = new WebSocket(`ws://localhost:8000/ws/${encodeURIComponent("{{encoded_username}}")}`);
-}
-</script>

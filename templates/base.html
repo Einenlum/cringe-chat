@@ -1,26 +1,32 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        
-        <title>Cringe Chat</title>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-        <link
-          rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"
-        />
-    </head>
-    <body>
-        <main class="container">
-            <header>
-                <h1><a href="/">Cringe Chat</a></h1>
-            </header>
+    <title>Cringe Chat</title>
 
-            {% block content %}{% endblock %}
-        </main>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"
+    />
+  </head>
+  <body>
+    <main class="container" hx-ext="ws">
+      <header>
+        <h1><a href="/">Cringe Chat</a></h1>
+      </header>
 
-        <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-        {% block scripts %}{% endblock %}
-    </body>
+      <h2 id="current-username"></h2>
+      <div id="connected-users-wrapper"></div>
+      <h3 id="chosen-recipient"></h3>
+
+      {% block content %}{% endblock %}
+    </main>
+
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/htmx.org/dist/ext/ws.js"></script>
+    <script src="https://unpkg.com/htmx.org/dist/ext/debug.js"></script>
+    {% block scripts %}{% endblock %}
+  </body>
 </html>

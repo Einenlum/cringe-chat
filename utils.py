@@ -5,7 +5,10 @@ from fastapi import Request, Response
 from fastapi.responses import RedirectResponse
 
 
-def encode_query_params(params: dict) -> str:
+def encode_query_params(params: dict | str) -> str:
+    if isinstance(params, str):
+        return parse.quote(params)
+
     return parse.urlencode(params)
 
 

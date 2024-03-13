@@ -1,8 +1,13 @@
 <form hx-post="/choose-username" hx-swap="outerHTML">
-    {% if error %}
-        <p>{{ error }}</p>
-    {% endif %}
+  {% if error %}
+  <p>{{ error }}</p>
+  {% endif %}
 
-    <input type="text" name="username" id="username" placeholder="Choose a username" />
-    <input type="submit" value="Send" />
+  <input
+    type="text"
+    name="username"
+    id="username"
+    placeholder="Choose a username"
+  />
+  <input type="submit" value="Send" />
 </form>

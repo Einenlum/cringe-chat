@@ -1,4 +1,4 @@
-<article>
-    <em data-role="time">{{ time }}</em>
-    <div data-role="message">{{ message }}</div>
+<article hx-swap-oob="beforeend:#messages">
+  <em data-role="time">{{ time }}</em>
+  <div data-role="message">{{ message }}</div>
 </article>
