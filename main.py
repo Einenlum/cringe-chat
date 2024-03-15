@@ -5,6 +5,7 @@ from datetime import datetime
 
 from fastapi import FastAPI, Request, Response, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from pool import Broker, ChatMessage
@@ -13,8 +14,13 @@ from utils import (
     encode_query_params,
     redirect_with_error,
 )
+from vite_utils import get_main_js_manifest
+
+# check if file exists
+main_js_manifest = get_main_js_manifest()
 
 templates = Jinja2Templates(directory="templates")
+templates.env.globals["main_js_manifest"] = main_js_manifest
 
 broker = Broker(templates)
 
@@ -31,7 +37,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-
+app.mount("/dist", StaticFiles(directory="dist"), name="dist")
 
 app.add_middleware(
     CORSMiddleware,

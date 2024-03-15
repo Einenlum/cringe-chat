@@ -1,0 +1,9 @@
+{% if main_js_manifest %} 
+    {% for css in main_js_manifest.css %}
+        <link rel="stylesheet" href="/dist/{{ css }}" />
+    {% endfor %}
+    <script type="module" src="/dist/{{ main_js_manifest.file }}"></script>
+{% else %}
+    <script src="http://localhost:5173/@vite/client" type="module"></script>
+    <script src="http://localhost:5173/resources/main.js" type="module"></script>
+{% endif %}

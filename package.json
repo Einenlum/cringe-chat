@@ -1,0 +1,16 @@
+{
+  "name": "fastapi-cringe",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "devDependencies": {
+    "vite": "^5.1.6"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "type": "module",
+  "author": "",
+  "license": "ISC"
+}
