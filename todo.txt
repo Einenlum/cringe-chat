@@ -1,5 +1,4 @@
 - Design with tailwind
-- Install vite
 - Fix message container min size
 - Add ... if someone is typing
 - Different sign when the message has finished its display
