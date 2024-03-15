@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import json
 from dataclasses import dataclass
 
 from fastapi import WebSocket
@@ -27,7 +28,8 @@ class ConnectedUser:
 @dataclass
 class ChatMessage:
     sender: str
-    text: str
+    message: str
+    values: list[dict]
     datetime: datetime.datetime
 
 
@@ -99,6 +101,7 @@ class Broker:
                 },
             )
 
+        print("new room for users")
         self.new_room_for_users(encoded_username, username, recipient)
 
     def new_room_for_users(
@@ -164,7 +167,7 @@ class Broker:
             "htmx/own-message.html",
             {
                 "time": chat_message.datetime,
-                "message": chat_message.text,
+                "message": chat_message.message,
             },
         )
 
@@ -173,7 +176,7 @@ class Broker:
             "htmx/recipient-message.html",
             {
                 "time": chat_message.datetime,
-                "message": chat_message.text,
+                "values": json.dumps(chat_message.values),
             },
         )
 
@@ -188,4 +191,5 @@ class Broker:
             connected_user = self.connected_users[to_send["recipient"]]
 
             if connected_user.ws.state != WebSocketState.DISCONNECTED:
+                print(to_send["html"])
                 await connected_user.ws.send_text(to_send["html"])

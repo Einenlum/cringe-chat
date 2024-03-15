@@ -1,13 +1,102 @@
 <div id="page-content" hx-swap-oob="true">
   <h1>Chat with {{recipient}}</h1>
   <div id="messages"></div>
-  <form
-    hx-post="/send-message"
-    hx-swap="none"
-    hx-on::after-request=" if(event.detail.successful) this.reset()"
-  >
-    <input type="text" name="message" id="message" placeholder="Message" />
-    <input type="hidden" name="encoded_username" value="{{encoded_username}}" />
+  <form id="chat-form" autocomplete="off">
+    <input
+      type="text"
+      name="message"
+      id="message"
+      placeholder="Message"
+      autocomplete="off"
+    />
     <input type="submit" value="Send" />
   </form>
+
+  <script type="module">
+    const encodedUsername = '{{encoded_username}}';
+
+    const chatForm = document.getElementById('chat-form');
+    chatForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const message = event.target.message.value;
+      event.target.message.value = '';
+
+      fetch('/send-message', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          encoded_username: encodedUsername,
+          message: message,
+          values: compressData(),
+        }),
+      });
+
+      window.resetValues();
+    });
+
+    console.log('executed');
+    const text = document.getElementById('message');
+    console.log('le texte', text);
+
+    window.values = [];
+    window.start = null;
+
+    window.resetValues = function () {
+      window.values = [];
+      window.start = null;
+    };
+
+    text.addEventListener('input', () => {
+      console.log('ewa');
+      if (!start) {
+        start = new Date();
+      }
+
+      window.values = [
+        ...values,
+        {
+          value: text.value,
+          time: new Date() - start,
+        },
+      ];
+    });
+
+    window.compressData = () => {
+      const toCompressedItem = (lastValue, item) => {
+        if (lastValue.length === item.value.length) {
+          return null;
+        }
+
+        if (lastValue === item.value.slice(0, -1)) {
+          return { op: 'a', v: item.value.slice(-1), t: item.time };
+        }
+
+        if (
+          lastValue.length - 1 === item.value.length &&
+          lastValue.slice(0, -1) === item.value
+        ) {
+          return { op: 'd', t: item.time };
+        }
+
+        return { op: 'r', v: item.value, t: item.time };
+      };
+
+      const compressed = [];
+      let lastValue = '';
+
+      for (let i = 0; i < window.values.length; i++) {
+        let item = window.values[i];
+        let compressedItem = toCompressedItem(lastValue, item);
+
+        if (compressedItem) {
+          compressed.push(compressedItem);
+          lastValue = item.value;
+        }
+      }
+
+      return compressed;
+    };
+  </script>
 </div>

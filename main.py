@@ -1,4 +1,5 @@
 import asyncio
+import pprint
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -109,13 +110,20 @@ async def choose_recipient(request: Request):
 
 @app.post("/send-message")
 async def send_message(request: Request):
-    data = await request.form()
+    # get json body
+    body = await request.body()
+    print(body)
+    data = await request.json()
+
     encoded_username = str(data["encoded_username"])
     username = decrypt_message(encoded_username)
     message = str(data["message"])
+    values = list(data["values"])
+
+    pprint.pprint(data)
     now = datetime.now()
 
-    chat_message = ChatMessage(username, message, now)
+    chat_message = ChatMessage(username, message, values, now)
 
     broker.send_chat_message(chat_message)
 
